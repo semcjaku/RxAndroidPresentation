@@ -6,8 +6,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
 
-import org.reactivestreams.Subscriber;
-
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
@@ -31,7 +30,7 @@ public class MainActivity extends AppCompatActivity {
     CompositeDisposable disposables = new CompositeDisposable();
 
     public enum Example {
-        MAIN, CREATE, JUST, RANGE, REPEAT, INTERVAL, TIMER, FROMARRAY, FILTER, DISTINCT, TAKE, TAKEWHILE, LAB_TASK
+        MAIN, CREATE, JUST, RANGE, REPEAT, INTERVAL, TIMER, FROMARRAY, FILTER, DISTINCT, TAKE, TAKEWHILE, BUFFER, MAP, LAB_TASK
     }
 
     @Override
@@ -45,7 +44,7 @@ public class MainActivity extends AppCompatActivity {
         Observable<Long> longObservable;
 
         // modify to switch between examples
-        Example currentExample = Example.LAB_TASK;
+        Example currentExample = Example.BUFFER;
 
         switch(currentExample) {
             case CREATE:
@@ -92,6 +91,22 @@ public class MainActivity extends AppCompatActivity {
                 fruitObservable = createTakeWhileObservable();
                 defaultFruitSubscribe(fruitObservable);
                 break;
+            case BUFFER:
+                fruitObservable = createAlternateObservable();
+                bufferedFruitSubscribe(fruitObservable);
+                break;
+            case MAP:
+                fruitObservable = createDefaultObservable();
+                defaultFruitSubscribe(fruitObservable);
+
+                Function<Fruit, Fruit> dayPass = fruit -> {
+                    Log.d(TAG, "apply: doing work on thread: " + Thread.currentThread().getName());
+                    fruit.setDaysOld(fruit.getDaysOld() + 1);
+                    return fruit;
+                };
+
+                defaultFruitSubscribe(fruitObservable.delay(500,TimeUnit.MILLISECONDS).map(dayPass));
+                break;
             case LAB_TASK:
                 //fruitObservable = createLabTaskObservable();
                 //defaultFruitSubscribe(fruitObservable);
@@ -113,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
 //        return Observable
 //                .fromIterable()
 //                .subscribeOn(Schedulers.io())
-//                .observeOn(AndroidSchedulers.mainThread());*/
+//                .observeOn(AndroidSchedulers.mainThread());
 //    }
 
     private Observable<Fruit> createObservable() {
@@ -144,6 +159,13 @@ public class MainActivity extends AppCompatActivity {
     private Observable<Fruit> createDefaultObservable() {
         return Observable
                 .fromIterable(DataSource.createFruitsList())
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread());
+    }
+
+    private Observable<Fruit> createAlternateObservable() {
+        return Observable
+                .fromIterable(DataSource.createLabList())
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread());
     }
@@ -236,6 +258,34 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onNext(@NonNull Fruit fruit) {
                 Log.i(TAG, "Processing fruit: " + fruit);
+            }
+
+            @Override
+            public void onError(@NonNull Throwable e) {
+                Log.e(TAG, "Observer error: ", e);
+            }
+
+            @Override
+            public void onComplete() {
+                Log.d(TAG, "Observer completed.");
+            }
+        });
+    }
+
+    private void bufferedFruitSubscribe(Observable<Fruit> fruitObservable) {
+        fruitObservable.buffer(3).subscribe(new Observer<List<Fruit>>() {
+            @Override
+            public void onSubscribe(@NonNull Disposable d) {
+                disposables.add(d);
+                Log.d(TAG, "Observer subscribed.");
+            }
+
+            @Override
+            public void onNext(@NonNull List<Fruit> fruits) {
+                Log.i(TAG, "--- Processing buffer ---");
+                for(Fruit fruit: fruits){
+                    Log.i(TAG, "Processing fruit: " + fruit);
+                }
             }
 
             @Override
